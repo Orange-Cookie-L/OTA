@@ -1,0 +1,136 @@
+﻿<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>OTA 设备管理系统</title>
+    <link rel='stylesheet' href='/static/css/style.css'>
+</head>
+<body>
+    <div class='container'>
+        <header>
+            <h1>OTA 设备管理系统</h1>
+            <div class='status-bar'>
+                <span id='server-status' class='status-badge'>连接中...</span>
+                <span id='device-count'>设备数: 0</span>
+            </div>
+        </header>
+
+        <nav class='tabs'>
+            <button class='tab-btn active' data-tab='devices'>设备管理</button>
+            <button class='tab-btn' data-tab='firmware'>固件管理</button>
+            <button class='tab-btn' data-tab='push'>推送更新</button>
+            <button class='tab-btn' data-tab='logs'>操作日志</button>
+        </nav>
+
+        <main>
+            <section id='devices-tab' class='tab-content active'>
+                <div class='toolbar'>
+                    <button class='btn btn-primary' onclick='refreshDevices()'>刷新设备列表</button>
+                    <button class='btn btn-success' onclick='showAddDeviceModal()'>添加设备</button>
+                    <input type='text' id='device-search' placeholder='搜索设备...' onkeyup='filterDevices()'>
+                </div>
+
+                <div class='table-container'>
+                    <table class='data-table'>
+                        <thead>
+                            <tr>
+                                <th>设备 ID</th>
+                                <th>类型</th>
+                                <th>版本</th>
+                                <th>状态</th>
+                                <th>IP 地址</th>
+                                <th>最后心跳</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id='device-list'>
+                            <tr><td colspan='7' class='loading'>加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id='firmware-tab' class='tab-content'>
+                <div class='toolbar'>
+                    <button class='btn btn-primary' onclick='refreshFirmware()'>刷新固件列表</button>
+                    <button class='btn btn-success' onclick='showUploadModal()'>上传固件</button>
+                </div>
+
+                <div class='table-container'>
+                    <table class='data-table'>
+                        <thead>
+                            <tr>
+                                <th>文件名</th>
+                                <th>版本</th>
+                                <th>大小</th>
+                                <th>CRC32</th>
+                                <th>上传时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id='firmware-list'>
+                            <tr><td colspan='6' class='loading'>加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id='push-tab' class='tab-content'>
+                <div class='card'>
+                    <h2>推送更新</h2>
+                    <form id='push-form' onsubmit='pushUpdate(event)'>
+                        <div class='form-group'>
+                            <label>目标设备</label>
+                            <div class='checkbox-group'>
+                                <label class='checkbox-label'>
+                                    <input type='checkbox' id='push-all-devices' onchange='toggleDeviceSelection()'>
+                                    全部设备
+                                </label>
+                                <div id='device-checkboxes' class='checkbox-list'></div>
+                            </div>
+                        </div>
+
+                        <div class='form-group'>
+                            <label for='firmware-select'>选择固件</label>
+                            <select id='firmware-select' required>
+                                <option value=''>请选择固件...</option>
+                            </select>
+                        </div>
+
+                        <div class='form-group'>
+                            <label class='checkbox-label'>
+                                <input type='checkbox' id='force-update'>
+                                强制更新（忽略版本检查）
+                            </label>
+                        </div>
+
+                        <button type='submit' class='btn btn-primary'>推送更新</button>
+                    </form>
+                </div>
+
+                <div class='card'>
+                    <h2>推送状态</h2>
+                    <div id='push-status-list' class='status-list'></div>
+                </div>
+            </section>
+
+            <section id='logs-tab' class='tab-content'>
+                <div class='toolbar'>
+                    <button class='btn btn-secondary' onclick='clearLogs()'>清空日志</button>
+                </div>
+                <div id='log-container' class='log-container'></div>
+            </section>
+        </main>
+    </div>
+
+    <div id='modal' class='modal'>
+        <div class='modal-content'>
+            <span class='close' onclick='closeModal()'>&times;</span>
+            <div id='modal-body'></div>
+        </div>
+    </div>
+
+    <script src='/static/js/app.js'></script>
+</body>
+</html>
