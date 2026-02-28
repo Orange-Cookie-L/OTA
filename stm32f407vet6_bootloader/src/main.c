@@ -6,7 +6,8 @@
 #define BOOTLOADER_VERSION    0x0001
 #define APP_START_ADDR        0x08010000
 #define APP_SIZE_MAX          0x000F0000
-#define TIMEOUT_MS            30000
+#define TIMEOUT_MS            60000      // 延长超时时间至60秒
+#define LOW_POWER_TIMEOUT_MS  5000       // 5秒无活动进入低功耗模式
 
 UART_HandleTypeDef huart1;
 uint8_t rx_buffer[OTA_PACKET_HEADER_SIZE + OTA_MAX_PACKET_SIZE];
@@ -20,6 +21,15 @@ void GPIO_Init(void);
 void UART_Init(void);
 void jump_to_application(void);
 
+void EnterLowPowerMode(void) {
+    // 进入STOP模式
+    HAL_SuspendTick();
+    HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+    HAL_ResumeTick();
+    // 重新配置时钟
+    SystemClock_Config();
+}
+
 int main(void) {
     HAL_Init();
     SystemClock_Config();
@@ -30,6 +40,13 @@ int main(void) {
 
     while (1) {
         if (UART_ReceivePacket()) {
+            last_activity_time = HAL_GetTick();
+        }
+
+        if (!update_in_progress && 
+            (HAL_GetTick() - last_activity_time > LOW_POWER_TIMEOUT_MS)) {
+            // 进入低功耗模式
+            EnterLowPowerMode();
             last_activity_time = HAL_GetTick();
         }
 
@@ -51,7 +68,7 @@ void SystemClock_Config(void) {
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
     RCC_OscInitStruct.PLL.PLLM = 8;
-    RCC_OscInitStruct.PLL.PLLN = 168;
+    RCC_OscInitStruct.PLL.PLLN = 84;  // 降低系统时钟到84MHz
     RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
     RCC_OscInitStruct.PLL.PLLQ = 4;
     HAL_RCC_OscConfig(&RCC_OscInitStruct);
@@ -62,7 +79,7 @@ void SystemClock_Config(void) {
     RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
-    HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_5);
+    HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2);  // 降低闪存等待周期
 }
 
 void GPIO_Init(void) {
@@ -85,30 +102,44 @@ void UART_Init(void) {
 }
 
 uint8_t UART_ReceivePacket(void) {
-    OTA_Packet_t packet;
-    uint8_t header[OTA_PACKET_HEADER_SIZE];
-    uint16_t total_length;
-
-    if (HAL_UART_Receive(&huart1, header, OTA_PACKET_HEADER_SIZE, 100) != HAL_OK) {
-        return 0;
-    }
-
-    packet.cmd = header[0];
-    packet.offset = (header[1] << 24) | (header[2] << 16) | 
-                    (header[3] << 8) | header[4];
-    packet.length = (header[5] << 8) | header[6];
-
-    if (packet.length > OTA_MAX_PACKET_SIZE) {
-        return 0;
-    }
-
-    if (packet.length > 0) {
-        if (HAL_UART_Receive(&huart1, packet.data, packet.length, 1000) != HAL_OK) {
+    uint8_t byte;
+    // 检查是否有唤醒信号
+    if (HAL_UART_Receive(&huart1, &byte, 1, 10) == HAL_OK) {
+        if (byte == 0xAA) {
+            // 唤醒信号，重置活动时间
+            last_activity_time = HAL_GetTick();
             return 0;
+        } else {
+            // 正常数据包，继续接收
+            OTA_Packet_t packet;
+            uint8_t header[OTA_PACKET_HEADER_SIZE];
+            uint16_t total_length;
+
+            // 重构header
+            header[0] = byte;
+            if (HAL_UART_Receive(&huart1, &header[1], OTA_PACKET_HEADER_SIZE - 1, 100) != HAL_OK) {
+                return 0;
+            }
+
+            packet.cmd = header[0];
+            packet.offset = (header[1] << 24) | (header[2] << 16) | 
+                            (header[3] << 8) | header[4];
+            packet.length = (header[5] << 8) | header[6];
+
+            if (packet.length > OTA_MAX_PACKET_SIZE) {
+                return 0;
+            }
+
+            if (packet.length > 0) {
+                if (HAL_UART_Receive(&huart1, packet.data, packet.length, 1000) != HAL_OK) {
+                    return 0;
+                }
+            }
+
+            return ProcessPacket(&packet);
         }
     }
-
-    return ProcessPacket(&packet);
+    return 0;
 }
 
 uint8_t ProcessPacket(OTA_Packet_t *packet) {

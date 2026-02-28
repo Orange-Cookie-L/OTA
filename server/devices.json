@@ -1,1 +1,20 @@
-{}
+{
+  "TQSZ00001": {
+    "device_id": "TQSZ00001",
+    "device_type": "stm32f407vet6",
+    "current_version": "1.0.0",
+    "ip_address": "127.0.0.1",
+    "registered_at": "2026-02-26T17:04:12.802413",
+    "last_heartbeat": "2026-02-26T17:04:12.802413",
+    "status": "offline"
+  },
+  "TQSZ00002": {
+    "device_id": "TQSZ00002",
+    "device_type": "stm32f407vet6",
+    "current_version": "1.0.0",
+    "ip_address": "127.0.0.1",
+    "registered_at": "2026-02-26T17:17:03.976306",
+    "last_heartbeat": "2026-02-26T17:17:03.976306",
+    "status": "offline"
+  }
+}

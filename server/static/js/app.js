@@ -10,8 +10,54 @@ document.addEventListener('DOMContentLoaded', function() {
     refreshDevices();
     refreshFirmware();
     loadLogs();
+    loadTheme();
     setInterval(checkServerStatus, 30000);
 });
+
+function loadTheme() {
+    const savedTheme = localStorage.getItem('ota_theme') || 'light-theme';
+    document.body.className = savedTheme;
+    updateThemeButton(savedTheme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.body.className;
+    let newTheme;
+    switch (currentTheme) {
+        case 'light-theme':
+            newTheme = 'modern-theme';
+            break;
+        case 'modern-theme':
+            newTheme = 'dark-theme';
+            break;
+        case 'dark-theme':
+            newTheme = 'blue-theme';
+            break;
+        default:
+            newTheme = 'light-theme';
+    }
+    document.body.className = newTheme;
+    localStorage.setItem('ota_theme', newTheme);
+    updateThemeButton(newTheme);
+}
+
+function updateThemeButton(theme) {
+    const button = document.getElementById('theme-toggle');
+    switch (theme) {
+        case 'light-theme':
+            button.textContent = '切换现代主题';
+            break;
+        case 'modern-theme':
+            button.textContent = '切换深色主题';
+            break;
+        case 'dark-theme':
+            button.textContent = '切换蓝色主题';
+            break;
+        case 'blue-theme':
+            button.textContent = '切换浅色主题';
+            break;
+    }
+}
 
 function initTabs() {
     const tabs = document.querySelectorAll('.tab-btn');
@@ -65,7 +111,7 @@ async function refreshDevices() {
 function renderDevices() {
     const tbody = document.getElementById('device-list');
     if (devices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">暂无设备</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="no-data">暂无设备</td></tr>';
         return;
     }
     
@@ -87,7 +133,14 @@ function renderDevices() {
 
 function updateDeviceCount() {
     const onlineCount = devices.filter(d => d.status === 'online').length;
-    document.getElementById('device-count').textContent = `设备数: ${devices.length} (在线: ${onlineCount})`;
+    const totalDevicesElement = document.getElementById('total-devices');
+    const onlineDevicesElement = document.getElementById('online-devices');
+    if (totalDevicesElement) {
+        totalDevicesElement.textContent = devices.length;
+    }
+    if (onlineDevicesElement) {
+        onlineDevicesElement.textContent = onlineCount;
+    }
 }
 
 function updateDeviceCheckboxes() {
@@ -110,7 +163,7 @@ function filterDevices() {
     
     const tbody = document.getElementById('device-list');
     if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="loading">未找到匹配的设备</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="no-data">未找到匹配的设备</td></tr>';
     } else {
             tbody.innerHTML = filtered.map(device => `
             <tr>
@@ -145,7 +198,7 @@ async function refreshFirmware() {
 function renderFirmware() {
     const tbody = document.getElementById('firmware-list');
     if (firmwareList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="loading">暂无固件</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="no-data">暂无固件</td></tr>';
         return;
     }
     
@@ -427,16 +480,77 @@ function viewDevice(deviceId) {
     const modalBody = document.getElementById('modal-body');
     modalBody.innerHTML = `
         <h2>设备详情</h2>
-        <div class="device-detail">
-            <p><strong>设备 ID:</strong> ${device.device_id}</p>
-            <p><strong>设备类型:</strong> ${device.device_type}</p>
-            <p><strong>当前版本:</strong> ${device.current_version}</p>
-            <p><strong>状态:</strong> <span class="status-${device.status === 'online' ? 'online' : 'offline'}">${device.status === 'online' ? '在线' : '离线'}</span></p>
-            <p><strong>IP 地址:</strong> ${device.ip_address}</p>
-            <p><strong>注册时间:</strong> ${formatTime(device.registered_at)}</p>
-            <p><strong>最后心跳:</strong> ${formatTime(device.last_heartbeat)}</p>
+        <div class="device-info">
+            <div class="info-item">
+                <span class="info-label">设备 ID:</span>
+                <span class="info-value">${device.device_id}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">设备类型:</span>
+                <span class="info-value">${device.device_type}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">当前版本:</span>
+                <span class="info-value">${device.current_version}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">状态:</span>
+                <span class="status-${device.status === 'online' ? 'online' : 'offline'}">${device.status === 'online' ? '在线' : '离线'}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">IP 地址:</span>
+                <span class="info-value">${device.ip_address}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">注册时间:</span>
+                <span class="info-value">${formatTime(device.registered_at)}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">最后心跳:</span>
+                <span class="info-value">${formatTime(device.last_heartbeat)}</span>
+            </div>
         </div>
-        <button class="btn btn-primary" onclick="closeModal()">关闭</button>
+        <div class="modal-actions">
+            <button class="btn btn-primary" onclick="closeModal()">关闭</button>
+        </div>
+        <style>
+            .device-info {
+                margin: 20px 0;
+                background: var(--bg-secondary);
+                border-radius: 8px;
+                padding: 20px;
+                border: 1px solid var(--border-secondary);
+            }
+            
+            .info-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px 0;
+                border-bottom: 1px solid var(--border-secondary);
+            }
+            
+            .info-item:last-child {
+                border-bottom: none;
+            }
+            
+            .info-label {
+                font-weight: 600;
+                color: var(--text-secondary);
+                min-width: 100px;
+            }
+            
+            .info-value {
+                color: var(--text-primary);
+                font-weight: 500;
+            }
+            
+            .modal-actions {
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 20px;
+            }
+        </style>
     `;
     showModal();
 }

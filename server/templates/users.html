@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>用户管理 - OTA 设备管理系统</title>
+    <link rel='icon' href='/static/images/喷火龙.png' type='image/png'>
+    <link rel='shortcut icon' href='/static/images/喷火龙.png' type='image/png'>
+    <link rel='stylesheet' href='/static/css/style.css'>
+</head>
+<body class="light-theme">
+    <div class='container'>
+        <header>
+            <h1>OTA 设备管理系统</h1>
+            <div class='status-bar'>
+                <span id='server-status' class='status-badge'>连接中...</span>
+                <div class='device-stats'>
+                    <span class='device-count'>设备数: <strong id='total-devices'>0</strong></span>
+                    <span class='online-count'>在线: <strong id='online-devices'>0</strong></span>
+                </div>
+
+                <button class='btn btn-secondary' onclick='toggleTheme()' id='theme-toggle'>切换现代主题</button>
+            </div>
+        </header>
+
+        <nav class='tabs'>
+            <button class='tab-btn' onclick='navigateTo("/")' data-tab='devices'>设备管理</button>
+            <button class='tab-btn' onclick='navigateTo("/")' data-tab='firmware'>固件管理</button>
+            <button class='tab-btn' onclick='navigateTo("/")' data-tab='push'>推送更新</button>
+            <button class='tab-btn' onclick='navigateTo("/")' data-tab='logs'>操作日志</button>
+            <button class='tab-btn active' data-tab='users'>用户管理</button>
+        </nav>
+
+        <main>
+            <section id='users-tab' class='tab-content active'>
+                <div class='toolbar'>
+                    <button class='btn btn-primary' onclick='refreshUsers()'>刷新用户列表</button>
+                    {% if session.username == 'admin' %}
+                    <button class='btn btn-success' onclick='showAddUserModal()'>添加用户</button>
+                    {% endif %}
+                </div>
+
+                <div class='table-container'>
+                    <table class='data-table'>
+                        <thead>
+                            <tr>
+                                <th>用户名</th>
+                                <th>注册时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id='user-list'>
+                            {% for user in users.values() %}
+                            <tr>
+                                <td>{{ user.username }}{% if user.username == 'admin' %} (管理员){% endif %}</td>
+                                <td>{{ user.registered_at }}</td>
+                                <td>
+                                    {% if session.username == 'admin' and user.username != 'admin' %}
+                                    <button class='btn btn-danger btn-small' onclick='deleteUser("{{ user.username }}")'>删除</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id='modal' class='modal'>
+        <div class='modal-content'>
+            <span class='close' onclick='closeModal()'>&times;</span>
+            <div id='modal-body'></div>
+        </div>
+    </div>
+
+    <script src='/static/js/app.js'></script>
+    <script>
+        // 导航函数
+        function navigateTo(url) {
+            window.location.href = url;
+        }
+
+        function refreshUsers() {
+            window.location.reload();
+        }
+
+        function showAddUserModal() {
+            const modal = document.getElementById('modal');
+            const modalBody = document.getElementById('modal-body');
+            
+            modalBody.innerHTML = `
+                <h2>添加用户</h2>
+                <form onsubmit='addUser(event)'>
+                    <div class='form-group'>
+                        <label for='new-username'>用户名</label>
+                        <input type='text' id='new-username' name='username' required>
+                    </div>
+                    <div class='form-group'>
+                        <label for='new-password'>密码</label>
+                        <input type='password' id='new-password' name='password' required>
+                    </div>
+                    <button type='submit' class='btn btn-primary'>添加</button>
+                </form>
+            `;
+            
+            modal.classList.add('show');
+        }
+
+        function addUser(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('new-username').value;
+            const password = document.getElementById('new-password').value;
+            
+            fetch('/user/add', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username, password })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                } else {
+                    alert(data.message);
+                    closeModal();
+                    refreshUsers();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('添加用户失败');
+            });
+        }
+
+        function deleteUser(username) {
+            if (confirm(`确定要删除用户 ${username} 吗？`)) {
+                fetch(`/user/delete/${username}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        alert(data.message);
+                        refreshUsers();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('删除用户失败');
+                });
+            }
+        }
+
+        // 页面加载完成后加载主题
+        window.onload = function() {
+            // 加载保存的主题
+            loadTheme();
+        }
+    </script>
+
+    <div class='dino-container'>
+        <img src='/static/images/喷火龙.png' class='dino' alt='喷火龙'>
+    </div>
+</body>
+</html>

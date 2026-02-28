@@ -1,26 +1,31 @@
-from flask import Flask, request, jsonify, send_file, render_template
+from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for
 from flask_cors import CORS
 import os
 import hashlib
 import json
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
+import functools
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
+app.secret_key = '9f8e7d6c5b4a3s2d1f0g9h8j7k6l5m4n3b2v1c0x'  # 用于加密session
+app.permanent_session_lifetime = timedelta(hours=1)  # 设置session过期时间为1小时
 CORS(app)
 
 UPLOAD_FOLDER = 'firmware'
 FIRMWARE_INFO_FILE = 'firmware_info.json'
 DEVICES_FILE = 'devices.json'
 PENDING_UPDATES_FILE = 'pending_updates.json'
+USERS_FILE = 'users.json'
 
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 devices = {}
 pending_updates = defaultdict(list)
+users = {}
 update_lock = threading.Lock()
 
 def calculate_file_crc32(file_path):
@@ -38,6 +43,48 @@ def calculate_file_crc32(file_path):
                     else:
                         crc >>= 1
     return crc ^ 0xFFFFFFFF
+
+def hash_password(password):
+    """加密密码"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_users():
+    """加载用户信息"""
+    global users
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, 'r') as f:
+                users = json.load(f)
+        except:
+            users = {}
+    else:
+        users = {}
+    
+    # 确保管理员账号存在
+    if 'admin' not in users:
+        users['admin'] = {
+            'username': 'admin',
+            'password': hash_password('admin'),
+            'registered_at': datetime.now().isoformat()
+        }
+        save_users()
+
+def save_users():
+    """保存用户信息"""
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=2)
+
+def login_required(f):
+    """登录状态检查装饰器"""
+    @functools.wraps(f)
+    def decorated_function(*args, **kwargs):
+        print(f"Login required check, session contents: {dict(session)}")
+        if 'username' not in session:
+            print("User not in session, redirecting to login")
+            return redirect(url_for('login'))
+        print(f"User {session['username']} is logged in")
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/firmware', methods=['POST'])
 def upload_firmware():
@@ -148,8 +195,79 @@ def delete_firmware(filename):
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        if username in users and users[username]['password'] == hash_password(password):
+            session['username'] = username
+            session.permanent = True  # 设置session为永久会话，持续1小时
+            print(f"Login successful for user: {username}")
+            print(f"Session contents: {dict(session)}")
+            return redirect(url_for('index'))
+        else:
+            return render_template('login.html', error='用户名或密码错误')
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """注册已禁用，重定向到登录页面"""
+    return redirect(url_for('login'))
+
+
+
+@app.route('/users', methods=['GET'])
+@login_required
+def users_page():
+    return render_template('users.html', users=users)
+
+@app.route('/user/add', methods=['POST'])
+@login_required
+def add_user():
+    if session['username'] != 'admin':
+        return jsonify({'error': '只有管理员可以添加用户'}), 403
+    
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({'error': '用户名和密码不能为空'}), 400
+    
+    if username in users:
+        return jsonify({'error': '用户名已存在'}), 400
+    
+    users[username] = {
+        'username': username,
+        'password': hash_password(password),
+        'registered_at': datetime.now().isoformat()
+    }
+    save_users()
+    return jsonify({'message': '用户添加成功'})
+
+@app.route('/user/delete/<username>', methods=['DELETE'])
+@login_required
+def delete_user(username):
+    if session['username'] != 'admin':
+        return jsonify({'error': '只有管理员可以删除用户'}), 403
+    
+    if username == 'admin':
+        return jsonify({'error': '不能删除管理员账号'}), 400
+    
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+    
+    del users[username]
+    save_users()
+    return jsonify({'message': '用户删除成功'})
+
 @app.route('/', methods=['GET'])
+@login_required
 def index():
+    print(f"Accessing index page, session contents: {dict(session)}")
+    print(f"Session permanent: {session.permanent}")
     return render_template('index.html')
 
 def load_devices():
@@ -195,6 +313,7 @@ def save_pending_updates():
 
 load_devices()
 load_pending_updates()
+load_users()
 
 @app.route('/device/register', methods=['POST'])
 def register_device():
@@ -436,4 +555,6 @@ cleanup_thread = threading.Thread(target=cleanup_offline_devices, daemon=True)
 cleanup_thread.start()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    load_users()
+    load_devices()
+    app.run(host='0.0.0.0', port=5000, debug=False)

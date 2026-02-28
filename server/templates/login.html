@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang='zh-CN'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>登录 - OTA 设备管理系统</title>
+    <link rel='icon' href='/static/images/喷火龙.png' type='image/png'>
+    <link rel='shortcut icon' href='/static/images/喷火龙.png' type='image/png'>
+    <link rel='stylesheet' href='/static/css/style.css'>
+    <style>
+        body {
+            background: var(--bg-primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(255, 154, 162, 0.15) 0%, transparent 25%),
+                radial-gradient(circle at 90% 30%, rgba(181, 170, 255, 0.15) 0%, transparent 30%),
+                radial-gradient(circle at 50% 80%, rgba(168, 230, 207, 0.15) 0%, transparent 25%);
+            background-attachment: fixed;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+        .login-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            padding: 3rem 2rem;
+            width: 100%;
+            max-width: 450px;
+            border: 1px solid var(--border-primary);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            animation: slideInUp 0.5s ease-out;
+        }
+        .login-container:hover {
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+            transform: translateY(-5px);
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-logo {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 1.5rem;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            animation: pulse 2s infinite;
+        }
+        .login-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: transparent;
+        }
+        .login-container h2 {
+            margin-top: 0;
+            text-align: center;
+            color: var(--accent-pink);
+            font-size: 24px;
+            font-weight: 700;
+            text-shadow: 0 2px 10px rgba(255, 204, 213, 0.3);
+            margin-bottom: 0.5rem;
+        }
+        .login-container p {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+            position: relative;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.75rem;
+            color: var(--accent-purple);
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            border: 2px solid var(--border-secondary);
+            border-radius: 12px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 16px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+            background: var(--bg-secondary);
+            box-shadow: 0 0 0 3px rgba(199, 206, 234, 0.2);
+            animation: pulseInput 1s ease;
+        }
+        .form-group input:hover {
+            border-color: var(--accent-pink);
+        }
+        .btn {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            border: 2px solid var(--border-secondary);
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: var(--bg-secondary);
+            color: var(--accent-purple);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+            margin-top: 1rem;
+        }
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: var(--gradient-primary);
+            opacity: 0;
+            transition: left 0.5s ease, opacity 0.5s ease;
+            z-index: -1;
+        }
+        .btn:hover::before {
+            left: 0;
+            opacity: 0.1;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(199, 206, 234, 0.3);
+            border-color: var(--accent-purple);
+        }
+        .btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid #c62828;
+            animation: fadeIn 0.5s ease;
+        }
+        .login-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.5rem;
+        }
+        .register-link {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+        .register-link a {
+            color: var(--accent-purple);
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .register-link a:hover {
+            text-decoration: underline;
+            color: var(--accent-pink);
+        }
+        .forgot-password {
+            font-size: 14px;
+        }
+        .forgot-password a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        .forgot-password a:hover {
+            color: var(--accent-purple);
+            text-decoration: underline;
+        }
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(199, 206, 234, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(199, 206, 234, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(199, 206, 234, 0);
+            }
+        }
+        @keyframes pulseInput {
+            0% {
+                box-shadow: 0 0 0 0 rgba(199, 206, 234, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(199, 206, 234, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(199, 206, 234, 0);
+            }
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @media (max-width: 768px) {
+            .login-container {
+                padding: 2rem 1.5rem;
+                margin: 0 1rem;
+            }
+            .login-logo {
+                width: 80px;
+                height: 80px;
+            }
+            .login-container h2 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body class='light-theme'>
+    <div class='login-container'>
+        <div class='login-header'>
+            <div class='login-logo'>
+                <img src='/static/images/喷火龙.png' alt='喷火龙'>
+            </div>
+            <h2>登录 OTA 设备管理系统</h2>
+            <p>请输入您的账号和密码</p>
+        </div>
+        {% if error %}
+        <div class='error'>{{ error }}</div>
+        {% endif %}
+        <form method='POST'>
+            <div class='form-group'>
+                <label for='username'>用户名</label>
+                <input type='text' id='username' name='username' required placeholder='请输入用户名'>
+            </div>
+            <div class='form-group'>
+                <label for='password'>密码</label>
+                <input type='password' id='password' name='password' required placeholder='请输入密码'>
+            </div>
+            <div class='login-footer'>
+                <div class='forgot-password'>
+                    <a href='#'>忘记密码？</a>
+                </div>
+            </div>
+            <button type='submit' class='btn'>登录</button>
+        </form>
+
+    </div>
+    <script>
+        // 加载保存的主题
+        window.onload = function() {
+            const savedTheme = localStorage.getItem('ota_theme') || 'light-theme';
+            document.body.className = savedTheme;
+        }
+    </script>
+    <div style='position: fixed; top: 20px; right: 20px; z-index: 1000;'>
+        <button class='btn' onclick='toggleTheme()' id='theme-toggle' style='padding: 0.5rem 1rem; font-size: 14px;'>切换风格</button>
+    </div>
+    <script>
+        // 主题切换函数
+        function toggleTheme() {
+            const currentTheme = document.body.className;
+            let newTheme;
+            switch (currentTheme) {
+                case 'light-theme':
+                    newTheme = 'modern-theme';
+                    break;
+                case 'modern-theme':
+                    newTheme = 'dark-theme';
+                    break;
+                case 'dark-theme':
+                    newTheme = 'blue-theme';
+                    break;
+                default:
+                    newTheme = 'light-theme';
+            }
+            document.body.className = newTheme;
+            localStorage.setItem('ota_theme', newTheme);
+            updateThemeButton(newTheme);
+        }
+
+        function updateThemeButton(theme) {
+            const button = document.getElementById('theme-toggle');
+            switch (theme) {
+                case 'light-theme':
+                    button.textContent = '切换现代主题';
+                    break;
+                case 'modern-theme':
+                    button.textContent = '切换深色主题';
+                    break;
+                case 'dark-theme':
+                    button.textContent = '切换蓝色主题';
+                    break;
+                case 'blue-theme':
+                    button.textContent = '切换浅色主题';
+                    break;
+            }
+        }
+    </script>
+</body>
+</html>

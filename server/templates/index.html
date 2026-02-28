@@ -1,18 +1,25 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang='zh-CN'>
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     <title>OTA 设备管理系统</title>
+    <link rel='icon' href='/static/images/喷火龙.png' type='image/png'>
+    <link rel='shortcut icon' href='/static/images/喷火龙.png' type='image/png'>
     <link rel='stylesheet' href='/static/css/style.css'>
 </head>
-<body>
+<body class="light-theme">
     <div class='container'>
         <header>
             <h1>OTA 设备管理系统</h1>
             <div class='status-bar'>
                 <span id='server-status' class='status-badge'>连接中...</span>
-                <span id='device-count'>设备数: 0</span>
+                <div class='device-stats'>
+                    <span class='device-count'>设备数: <strong id='total-devices'>0</strong></span>
+                    <span class='online-count'>在线: <strong id='online-devices'>0</strong></span>
+                </div>
+
+                <button class='btn btn-secondary' onclick='toggleTheme()' id='theme-toggle'>切换现代主题</button>
             </div>
         </header>
 
@@ -21,6 +28,7 @@
             <button class='tab-btn' data-tab='firmware'>固件管理</button>
             <button class='tab-btn' data-tab='push'>推送更新</button>
             <button class='tab-btn' data-tab='logs'>操作日志</button>
+            <button class='tab-btn' onclick='window.location.href="/users"' data-tab='users'>用户管理</button>
         </nav>
 
         <main>
@@ -132,5 +140,8 @@
     </div>
 
     <script src='/static/js/app.js'></script>
+    <div class='dino-container'>
+        <img src='/static/images/喷火龙.png' class='dino' alt='喷火龙'>
+    </div>
 </body>
 </html>

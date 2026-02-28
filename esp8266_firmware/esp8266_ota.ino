@@ -15,8 +15,10 @@
 
 #define PACKET_SIZE         512
 #define MAX_RETRIES         3
-#define HEARTBEAT_INTERVAL  30000
-#define CHECK_UPDATE_INTERVAL 300000
+#define HEARTBEAT_INTERVAL  60000      // 延长心跳间隔至60秒
+#define CHECK_UPDATE_INTERVAL 300000   // 5分钟检查一次更新
+#define DEEP_SLEEP_DURATION 60000000   // 深度睡眠60秒 (单位: 微秒)
+#define WAKEUP_PIN          16         // RST引脚，用于唤醒
 
 #define DEVICE_ID_PREFIX    "STM32_"
 
@@ -40,32 +42,82 @@ void setup() {
     Serial.begin(115200);
     Serial.swap();
     pinMode(LED_PIN, OUTPUT);
+    pinMode(WAKEUP_PIN, INPUT_PULLUP);
 
     generateDeviceID();
+    // 按需连接WiFi，不自动连接
+    // 首次启动时注册设备
     connectWiFi();
     registerDevice();
+    WiFi.disconnect();
+    WiFi.mode(WIFI_OFF);
+}
+
+void wakeupSTM32(void) {
+    // 唤醒STM32，通过串口发送唤醒信号
+    Serial.write(0xAA); // 唤醒命令
+    delay(100); // 等待STM32唤醒
 }
 
 void loop() {
     unsigned long current_time = millis();
+    uint8_t need_sleep = 1;
 
+    // 检查是否需要发送心跳
     if (current_time - last_heartbeat >= HEARTBEAT_INTERVAL) {
+        digitalWrite(LED_PIN, HIGH);
+        wakeupSTM32(); // 唤醒STM32
+        connectWiFi();
         sendHeartbeat();
         last_heartbeat = current_time;
+        need_sleep = 0;
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
+        digitalWrite(LED_PIN, LOW);
     }
 
+    // 检查是否需要检查更新
     if (!update_in_progress && current_time - last_update_check >= CHECK_UPDATE_INTERVAL) {
+        digitalWrite(LED_PIN, HIGH);
+        wakeupSTM32(); // 唤醒STM32
+        connectWiFi();
         checkForUpdate();
         last_update_check = current_time;
+        need_sleep = 0;
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
+        digitalWrite(LED_PIN, LOW);
     }
 
+    // 检查是否有可用更新
     if (update_available && !update_in_progress) {
+        digitalWrite(LED_PIN, HIGH);
+        wakeupSTM32(); // 唤醒STM32
+        connectWiFi();
         startPushedUpdate();
+        need_sleep = 0;
+        digitalWrite(LED_PIN, LOW);
     }
 
+    // 检查是否有串口命令
     if (Serial.available()) {
+        digitalWrite(LED_PIN, HIGH);
         uint8_t cmd = Serial.read();
-        processCommand(cmd);
+        if (cmd == 0xAA) {
+            // 忽略唤醒信号
+        } else {
+            processCommand(cmd);
+        }
+        need_sleep = 0;
+        digitalWrite(LED_PIN, LOW);
+    }
+
+    // 进入深度睡眠
+    if (need_sleep && !update_in_progress) {
+        digitalWrite(LED_PIN, LOW);
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
+        ESP.deepSleep(DEEP_SLEEP_DURATION);
     }
 }
 
@@ -102,6 +154,11 @@ void registerDevice() {
 }
 
 void sendHeartbeat() {
+    // 按需连接WiFi
+    if (WiFi.status() != WL_CONNECTED) {
+        connectWiFi();
+    }
+
     String url = String(SERVER_BASE_URL) + ":" + String(SERVER_PORT) + "/device/heartbeat";
     
     http.begin(url);
@@ -126,9 +183,20 @@ void sendHeartbeat() {
     }
 
     http.end();
+
+    // 通信完成后断开WiFi
+    if (!update_in_progress) {
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
+    }
 }
 
 void checkForUpdate() {
+    // 按需连接WiFi
+    if (WiFi.status() != WL_CONNECTED) {
+        connectWiFi();
+    }
+
     String url = String(SERVER_BASE_URL) + ":" + String(SERVER_PORT) + "/device/check-update";
     
     http.begin(url);
@@ -153,6 +221,12 @@ void checkForUpdate() {
     }
 
     http.end();
+
+    // 通信完成后断开WiFi
+    if (!update_in_progress) {
+        WiFi.disconnect();
+        WiFi.mode(WIFI_OFF);
+    }
 }
 
 void startPushedUpdate() {
