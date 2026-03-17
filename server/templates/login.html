@@ -154,38 +154,7 @@
             border-left: 4px solid #c62828;
             animation: fadeIn 0.5s ease;
         }
-        .login-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 1.5rem;
-        }
-        .register-link {
-            text-align: center;
-            margin-top: 1.5rem;
-        }
-        .register-link a {
-            color: var(--accent-purple);
-            text-decoration: none;
-            font-weight: 600;
-            transition: all 0.3s ease;
-        }
-        .register-link a:hover {
-            text-decoration: underline;
-            color: var(--accent-pink);
-        }
-        .forgot-password {
-            font-size: 14px;
-        }
-        .forgot-password a {
-            color: var(--text-secondary);
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-        .forgot-password a:hover {
-            color: var(--accent-purple);
-            text-decoration: underline;
-        }
+
         @keyframes slideInUp {
             from {
                 opacity: 0;
@@ -264,11 +233,7 @@
                 <label for='password'>密码</label>
                 <input type='password' id='password' name='password' required placeholder='请输入密码'>
             </div>
-            <div class='login-footer'>
-                <div class='forgot-password'>
-                    <a href='#'>忘记密码？</a>
-                </div>
-            </div>
+
             <button type='submit' class='btn'>登录</button>
         </form>
 

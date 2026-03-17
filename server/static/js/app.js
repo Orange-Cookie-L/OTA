@@ -102,7 +102,7 @@ async function refreshDevices() {
         renderDevices();
         updateDeviceCount();
         updateDeviceCheckboxes();
-        addLog('info', '设备列表已刷新');
+        // 不添加刷新日志，避免日志过多
     } catch (error) {
         addLog('error', '获取设备列表失败: ' + error.message);
     }
@@ -145,16 +145,21 @@ function updateDeviceCount() {
 
 function updateDeviceCheckboxes() {
     const container = document.getElementById('device-checkboxes');
-    container.innerHTML = devices.map(device => `
-        <label>
-            <input type="checkbox" class="device-checkbox" value="${device.device_id}">
-            ${device.device_id} (${device.device_type})
-        </label>
-    `).join('');
+    if (container) {
+        container.innerHTML = devices.map(device => `
+            <label>
+                <input type="checkbox" class="device-checkbox" value="${device.device_id}">
+                ${device.device_id} (${device.device_type})
+            </label>
+        `).join('');
+    }
 }
 
 function filterDevices() {
-    const search = document.getElementById('device-search').value.toLowerCase();
+    const searchElement = document.getElementById('device-search');
+    if (!searchElement) return;
+    
+    const search = searchElement.value.toLowerCase();
     const filtered = devices.filter(device => 
         device.device_id.toLowerCase().includes(search) ||
         device.device_type.toLowerCase().includes(search) ||
@@ -162,24 +167,26 @@ function filterDevices() {
     );
     
     const tbody = document.getElementById('device-list');
-    if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="no-data">未找到匹配的设备</td></tr>';
-    } else {
-            tbody.innerHTML = filtered.map(device => `
-            <tr>
-                <td>${device.device_id}</td>
-                <td>${device.device_type}</td>
-                <td>${device.current_version}</td>
-                <td><span class="status-${device.status === 'online' ? 'online' : 'offline'}">${device.status === 'online' ? '在线' : '离线'}</span></td>
-                <td>${device.ip_address}</td>
-                <td>${formatTime(device.last_heartbeat)}</td>
-                <td>
-                    <button class="btn btn-small btn-primary" onclick="viewDevice('${device.device_id}')">查看</button>
-                    <button class="btn btn-small btn-danger" onclick="deleteDevice('${device.device_id}')">删除</button>
-                </td>
-            </tr>
-        `).join('');
-        }
+    if (tbody) {
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="no-data">未找到匹配的设备</td></tr>';
+        } else {
+                tbody.innerHTML = filtered.map(device => `
+                <tr>
+                    <td>${device.device_id}</td>
+                    <td>${device.device_type}</td>
+                    <td>${device.current_version}</td>
+                    <td><span class="status-${device.status === 'online' ? 'online' : 'offline'}">${device.status === 'online' ? '在线' : '离线'}</span></td>
+                    <td>${device.ip_address}</td>
+                    <td>${formatTime(device.last_heartbeat)}</td>
+                    <td>
+                        <button class="btn btn-small btn-primary" onclick="viewDevice('${device.device_id}')">查看</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteDevice('${device.device_id}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+            }
+    }
 }
 
 async function refreshFirmware() {
@@ -189,7 +196,7 @@ async function refreshFirmware() {
         firmwareList = data.firmware_list || [];
         renderFirmware();
         updateFirmwareSelect();
-        addLog('info', '固件列表已刷新');
+        // 不添加刷新日志，避免日志过多
     } catch (error) {
         addLog('error', '获取固件列表失败: ' + error.message);
     }
@@ -480,77 +487,16 @@ function viewDevice(deviceId) {
     const modalBody = document.getElementById('modal-body');
     modalBody.innerHTML = `
         <h2>设备详情</h2>
-        <div class="device-info">
-            <div class="info-item">
-                <span class="info-label">设备 ID:</span>
-                <span class="info-value">${device.device_id}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">设备类型:</span>
-                <span class="info-value">${device.device_type}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">当前版本:</span>
-                <span class="info-value">${device.current_version}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">状态:</span>
-                <span class="status-${device.status === 'online' ? 'online' : 'offline'}">${device.status === 'online' ? '在线' : '离线'}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">IP 地址:</span>
-                <span class="info-value">${device.ip_address}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">注册时间:</span>
-                <span class="info-value">${formatTime(device.registered_at)}</span>
-            </div>
-            <div class="info-item">
-                <span class="info-label">最后心跳:</span>
-                <span class="info-value">${formatTime(device.last_heartbeat)}</span>
-            </div>
+        <div class="device-detail">
+            <p><strong>设备 ID:</strong> ${device.device_id}</p>
+            <p><strong>设备类型:</strong> ${device.device_type}</p>
+            <p><strong>当前版本:</strong> ${device.current_version}</p>
+            <p><strong>状态:</strong> <span class="status-${device.status === 'online' ? 'online' : 'offline'}">${device.status === 'online' ? '在线' : '离线'}</span></p>
+            <p><strong>IP 地址:</strong> ${device.ip_address}</p>
+            <p><strong>注册时间:</strong> ${formatTime(device.registered_at)}</p>
+            <p><strong>最后心跳:</strong> ${formatTime(device.last_heartbeat)}</p>
         </div>
-        <div class="modal-actions">
-            <button class="btn btn-primary" onclick="closeModal()">关闭</button>
-        </div>
-        <style>
-            .device-info {
-                margin: 20px 0;
-                background: var(--bg-secondary);
-                border-radius: 8px;
-                padding: 20px;
-                border: 1px solid var(--border-secondary);
-            }
-            
-            .info-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 10px 0;
-                border-bottom: 1px solid var(--border-secondary);
-            }
-            
-            .info-item:last-child {
-                border-bottom: none;
-            }
-            
-            .info-label {
-                font-weight: 600;
-                color: var(--text-secondary);
-                min-width: 100px;
-            }
-            
-            .info-value {
-                color: var(--text-primary);
-                font-weight: 500;
-            }
-            
-            .modal-actions {
-                display: flex;
-                justify-content: flex-end;
-                margin-top: 20px;
-            }
-        </style>
+        <button class="btn btn-primary" onclick="closeModal()">关闭</button>
     `;
     showModal();
 }

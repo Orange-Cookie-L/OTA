@@ -11,7 +11,7 @@ import functools
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = '9f8e7d6c5b4a3s2d1f0g9h8j7k6l5m4n3b2v1c0x'  # 用于加密session
-app.permanent_session_lifetime = timedelta(hours=1)  # 设置session过期时间为1小时
+app.permanent_session_lifetime = timedelta(seconds=0)  # 设置session立即过期
 CORS(app)
 
 UPLOAD_FOLDER = 'firmware'
@@ -203,7 +203,7 @@ def login():
         
         if username in users and users[username]['password'] == hash_password(password):
             session['username'] = username
-            session.permanent = True  # 设置session为永久会话，持续1小时
+            # 不设置session.permanent，确保session不会持久化
             print(f"Login successful for user: {username}")
             print(f"Session contents: {dict(session)}")
             return redirect(url_for('index'))
