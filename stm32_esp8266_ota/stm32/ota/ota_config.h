@@ -1,0 +1,33 @@
+/*
+ * OTA 配置文件
+ */
+
+#ifndef OTA_CONFIG_H
+#define OTA_CONFIG_H
+
+// 设备信息
+#define DEVICE_ID "STM32F103C8T6_001"
+#define DEVICE_TYPE "stm32f103c8t6"
+#define CURRENT_VERSION "1.0.0"
+
+// 串口配置
+#define UART_BAUD_RATE 115200
+
+// 闪灯配置
+#define LED_PIN GPIO_PIN_13
+#define LED_PORT GPIOC
+#define LED_TOGGLE_INTERVAL 1000 // 1秒
+
+// OTA 相关配置
+#define HEARTBEAT_INTERVAL 30000 // 30秒
+#define CHECK_UPDATE_INTERVAL 60000 // 60秒
+
+// 串口命令
+#define CMD_REGISTER "REGISTER:"
+#define CMD_HEARTBEAT "HEARTBEAT"
+#define CMD_CHECK_UPDATE "CHECK_UPDATE"
+
+// ESP8266 响应
+#define RESP_UPDATE_AVAILABLE "UPDATE_AVAILABLE"
+
+#endif /* OTA_CONFIG_H */
