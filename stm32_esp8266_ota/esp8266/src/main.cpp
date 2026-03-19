@@ -123,8 +123,8 @@ void handleSerialCommunication() {
       // 发送心跳包
       sendHeartbeat();
     } else if (data.startsWith("CHECK_UPDATE")) {
-      // 检查更新
-      checkForUpdate();
+      // 检查更新（仅检查，不自动下载）
+      checkForUpdate(false);
     }
   }
 }
@@ -208,6 +208,25 @@ void sendHeartbeat() {
     String response = http.getString();
     Serial.print("心跳响应 (" + String(httpCode) + "): ");
     Serial.println(response);
+    
+    // 解析响应，检查是否有服务器推送的更新
+    StaticJsonDocument<512> responseDoc;
+    DeserializationError error = deserializeJson(responseDoc, response);
+    
+    if (!error) {
+      if (responseDoc.containsKey("update_required") && responseDoc["update_required"] == true) {
+        // 服务器推送了更新
+        String firmware_url = responseDoc["update"]["firmware_url"];
+        Serial.print("服务器推送更新: ");
+        Serial.println(firmware_url);
+        
+        // 通知STM32有更新
+        Serial.println("UPDATE_AVAILABLE");
+        
+        // 下载固件
+        downloadFirmware(firmware_url);
+      }
+    }
   } else {
     Serial.print("心跳失败: ");
     Serial.println(http.errorToString(httpCode));
@@ -218,9 +237,10 @@ void sendHeartbeat() {
 
 /**
   * @brief 检查固件更新
+  * @param auto_download: 是否自动下载固件
   * @retval None
   */
-void checkForUpdate() {
+void checkForUpdate(bool auto_download = false) {
   if (!wifi_connected || !device_registered) {
     return;
   }
@@ -267,8 +287,11 @@ void checkForUpdate() {
         // 通知STM32有更新（使用标志位）
         Serial.println("UPDATE_AVAILABLE");
         
-        // 模拟固件下载过程
-        downloadFirmware(firmware_url);
+        // 只有在auto_download为true时才自动下载
+        if (auto_download) {
+          // 下载固件
+          downloadFirmware(firmware_url);
+        }
       }
     }
   } else {
