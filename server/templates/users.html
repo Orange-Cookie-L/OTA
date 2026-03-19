@@ -7,45 +7,8 @@
     <link rel='icon' href='/static/images/喷火龙.png' type='image/png'>
     <link rel='shortcut icon' href='/static/images/喷火龙.png' type='image/png'>
     <link rel='stylesheet' href='/static/css/style.css'>
-    <style>
-        /* 加载动画 */
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: var(--bg-primary);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
-        .loading-spinner {
-            width: 50px;
-            height: 50px;
-            border: 4px solid var(--border-secondary);
-            border-top: 4px solid var(--accent-purple);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .loading-overlay.hidden {
-            opacity: 0;
-            visibility: hidden;
-        }
-    </style>
 </head>
 <body class="light-theme">
-    <!-- 加载动画 -->
-    <div class='loading-overlay' id='loadingOverlay'>
-        <div class='loading-spinner'></div>
-    </div>
-
     <div class='container'>
         <header>
             <h1>OTA 设备管理系统</h1>
@@ -54,25 +17,23 @@
                     <span class='device-count'>设备数: <strong id='total-devices'>0</strong></span>
                     <span class='online-count'>在线: <strong id='online-devices'>0</strong></span>
                 </div>
-
             </div>
         </header>
 
         <nav class='tabs'>
-            <button class='tab-btn' onclick='navigateTo("/")' data-tab='devices'>设备管理</button>
-            <button class='tab-btn' onclick='navigateTo("/")' data-tab='firmware'>固件管理</button>
-            <button class='tab-btn' onclick='navigateTo("/")' data-tab='push'>推送更新</button>
-            <button class='tab-btn' onclick='navigateTo("/")' data-tab='logs'>操作日志</button>
-            <button class='tab-btn active' data-tab='users'>用户管理</button>
+            <button class='tab-btn' onclick="location.href='/'">设备管理</button>
+            <button class='tab-btn' onclick="location.href='/'">固件管理</button>
+            <button class='tab-btn' onclick="location.href='/'">推送更新</button>
+            <button class='tab-btn' onclick="location.href='/'">操作日志</button>
+            <button class='tab-btn active'>用户管理</button>
         </nav>
 
         <main>
-            <section id='users-tab' class='tab-content active'>
+            <section id='users-section' class='tab-content active'>
                 <div class='toolbar'>
-                    <button class='btn btn-primary' onclick='refreshUsers()'>刷新用户列表</button>
-                    {% if session.username == 'admin' %}
-                    <button class='btn btn-success' onclick='showAddUserModal()'>添加用户</button>
-                    {% endif %}
+                    <button class='btn btn-primary' onclick='loadUsers()'>刷新列表</button>
+                    <button class='btn btn-success' id='add-user-btn' onclick='showAddUserModal()' style='display: none;'>添加用户</button>
+                    <button class='btn btn-secondary' id='change-password-btn' onclick='showChangePasswordModal()' style='display: none;'>修改密码</button>
                 </div>
 
                 <div class='table-container'>
@@ -80,22 +41,17 @@
                         <thead>
                             <tr>
                                 <th>用户名</th>
-                                <th>注册时间</th>
+                                <th>角色</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>最后登录</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id='user-list'>
-                            {% for user in users.values() %}
                             <tr>
-                                <td>{{ user.username }}{% if user.username == 'admin' %} (管理员){% endif %}</td>
-                                <td>{{ user.registered_at }}</td>
-                                <td>
-                                    {% if session.username == 'admin' and user.username != 'admin' %}
-                                    <button class='btn btn-danger btn-small' onclick='deleteUser("{{ user.username }}")'>删除</button>
-                                    {% endif %}
-                                </td>
+                                <td colspan='6' class='no-data'>加载中...</td>
                             </tr>
-                            {% endfor %}
                         </tbody>
                     </table>
                 </div>
@@ -103,112 +59,401 @@
         </main>
     </div>
 
-    <div id='modal' class='modal'>
+    <!-- 添加用户模态框 -->
+    <div id='add-user-modal' class='modal'>
         <div class='modal-content'>
             <span class='close' onclick='closeModal()'>&times;</span>
-            <div id='modal-body'></div>
+            <h2>添加用户</h2>
+            <form id='add-user-form' onsubmit='addUser(event)'>
+                <div class='form-group'>
+                    <label for='new-username'>用户名 *</label>
+                    <input type='text' id='new-username' required minlength='3' placeholder='至少3个字符'>
+                </div>
+                <div class='form-group'>
+                    <label for='new-password'>密码 *</label>
+                    <input type='password' id='new-password' required minlength='6' placeholder='至少6个字符'>
+                </div>
+                <div class='form-group'>
+                    <label for='new-role'>角色</label>
+                    <select id='new-role'>
+                        <option value='user'>普通用户</option>
+                        <option value='admin'>管理员</option>
+                    </select>
+                </div>
+                <div class='modal-actions'>
+                    <button type='button' class='btn btn-secondary' onclick='closeModal()'>取消</button>
+                    <button type='submit' class='btn btn-primary'>创建用户</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <script src='/static/js/app.js'></script>
+    <!-- 修改密码模态框 -->
+    <div id='change-password-modal' class='modal'>
+        <div class='modal-content'>
+            <span class='close' onclick='closeModal()'>&times;</span>
+            <h2>修改密码</h2>
+            <form id='change-password-form' onsubmit='changePassword(event)'>
+                <div class='form-group' id='old-password-group'>
+                    <label for='old-password'>旧密码 *</label>
+                    <input type='password' id='old-password' placeholder='请输入旧密码'>
+                </div>
+                <div class='form-group'>
+                    <label for='new-password-change'>新密码 *</label>
+                    <input type='password' id='new-password-change' required minlength='6' placeholder='至少6个字符'>
+                </div>
+                <div class='form-group'>
+                    <label for='confirm-password'>确认新密码 *</label>
+                    <input type='password' id='confirm-password' required minlength='6' placeholder='再次输入新密码'>
+                </div>
+                <div class='modal-actions'>
+                    <button type='button' class='btn btn-secondary' onclick='closeModal()'>取消</button>
+                    <button type='submit' class='btn btn-primary'>修改密码</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
-        // 导航函数，添加加载状态
-        function navigateTo(url) {
-            document.getElementById('loadingOverlay').classList.remove('hidden');
-            setTimeout(() => {
-                window.location.href = url;
-            }, 100);
-        }
-
-        function refreshUsers() {
-            document.getElementById('loadingOverlay').classList.remove('hidden');
-            setTimeout(() => {
-                window.location.reload();
-            }, 100);
-        }
-
-        function showAddUserModal() {
-            const modal = document.getElementById('modal');
-            const modalBody = document.getElementById('modal-body');
-            
-            modalBody.innerHTML = `
-                <h2>添加用户</h2>
-                <form onsubmit='addUser(event)'>
-                    <div class='form-group'>
-                        <label for='new-username'>用户名</label>
-                        <input type='text' id='new-username' name='username' required>
-                    </div>
-                    <div class='form-group'>
-                        <label for='new-password'>密码</label>
-                        <input type='password' id='new-password' name='password' required>
-                    </div>
-                    <button type='submit' class='btn btn-primary'>添加</button>
-                </form>
-            `;
-            
-            modal.classList.add('show');
-        }
-
-        function addUser(event) {
-            event.preventDefault();
-            
-            const username = document.getElementById('new-username').value;
-            const password = document.getElementById('new-password').value;
-            
-            fetch('/user/add', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ username, password })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                } else {
-                    alert(data.message);
-                    closeModal();
-                    refreshUsers();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('添加用户失败');
-            });
-        }
-
-        function deleteUser(username) {
-            if (confirm(`确定要删除用户 ${username} 吗？`)) {
-                fetch(`/user/delete/${username}`, {
-                    method: 'DELETE'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.error) {
-                        alert(data.error);
-                    } else {
-                        alert(data.message);
-                        refreshUsers();
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('删除用户失败');
-                });
+        // 加载主题
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('ota_theme');
+            if (savedTheme) {
+                document.body.className = savedTheme;
             }
         }
 
-        // 页面加载完成后隐藏加载动画
-        window.onload = function() {
-            // 加载保存的主题
+        // 当前登录用户信息
+        let currentUser = null;
+
+        // 页面加载时执行
+        document.addEventListener('DOMContentLoaded', function() {
             loadTheme();
-            // 隐藏加载动画
-            setTimeout(() => {
-                document.getElementById('loadingOverlay').classList.add('hidden');
-            }, 300);
+            getCurrentUser();
+            loadUsers();
+        });
+
+        // 获取当前登录用户信息
+        async function getCurrentUser() {
+            try {
+                const response = await fetch('/api/current-user');
+                if (response.ok) {
+                    const data = await response.json();
+                    currentUser = data.user;
+                    // 如果是管理员，显示添加用户和修改密码按钮
+                    if (currentUser && currentUser.role === 'admin') {
+                        document.getElementById('add-user-btn').style.display = 'inline-block';
+                        document.getElementById('change-password-btn').style.display = 'inline-block';
+                    }
+                }
+            } catch (error) {
+                console.error('获取当前用户信息失败:', error);
+            }
+        }
+
+        // 加载用户列表
+        async function loadUsers() {
+            const tbody = document.getElementById('user-list');
+            tbody.innerHTML = '<tr><td colspan="6" class="no-data">加载中...</td></tr>';
+
+            try {
+                const response = await fetch('/api/users');
+                if (!response.ok) {
+                    throw new Error('获取用户列表失败');
+                }
+                const data = await response.json();
+                renderUsers(data.users);
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="6" class="no-data">加载失败: ${error.message}</td></tr>`;
+            }
+        }
+
+        // 渲染用户列表
+        function renderUsers(users) {
+            const tbody = document.getElementById('user-list');
+            
+            if (!users || users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">暂无用户</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = users.map(user => {
+                const isAdmin = user.role === 'admin';
+                const isActive = user.status === 'active';
+                const isSelf = currentUser && user.username === currentUser.username;
+                
+                let actions = '';
+                if (currentUser && currentUser.role === 'admin') {
+                    // 管理员可以删除非admin用户，可以切换用户状态
+                    if (!isAdmin) {
+                        actions += `<button class='btn btn-small btn-danger' onclick='deleteUser("${user.username}")'>删除</button> `;
+                        actions += `<button class='btn btn-small ${isActive ? "btn-warning" : "btn-success"}' onclick='toggleUserStatus("${user.username}", "${isActive ? 'disabled' : 'active'}")'>${isActive ? '禁用' : '启用'}</button>`;
+                    }
+                }
+                
+                return `
+                    <tr>
+                        <td>${user.username} ${isAdmin ? '<span class="badge badge-admin">管理员</span>' : ''} ${isSelf ? '<span class="badge badge-self">我</span>' : ''}</td>
+                        <td>${isAdmin ? '管理员' : '普通用户'}</td>
+                        <td><span class="status-badge ${isActive ? 'status-active' : 'status-disabled'}">${isActive ? '启用' : '禁用'}</span></td>
+                        <td>${formatDate(user.created_at)}</td>
+                        <td>${user.last_login ? formatDate(user.last_login) : '从未登录'}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // 格式化日期
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+
+        // 显示添加用户模态框
+        function showAddUserModal() {
+            document.getElementById('add-user-modal').classList.add('show');
+            document.getElementById('new-username').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('new-role').value = 'user';
+        }
+
+        // 显示修改密码模态框
+        function showChangePasswordModal() {
+            document.getElementById('change-password-modal').classList.add('show');
+            document.getElementById('old-password').value = '';
+            document.getElementById('new-password-change').value = '';
+            document.getElementById('confirm-password').value = '';
+            
+            // 管理员不需要输入旧密码
+            const oldPasswordGroup = document.getElementById('old-password-group');
+            const oldPasswordInput = document.getElementById('old-password');
+            if (currentUser && currentUser.role === 'admin') {
+                oldPasswordGroup.style.display = 'none';
+                oldPasswordInput.required = false;
+            } else {
+                oldPasswordGroup.style.display = 'block';
+                oldPasswordInput.required = true;
+            }
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.classList.remove('show');
+            });
+        }
+
+        // 添加用户
+        async function addUser(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('new-username').value.trim();
+            const password = document.getElementById('new-password').value.trim();
+            const role = document.getElementById('new-role').value;
+
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, role })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('用户创建成功');
+                    closeModal();
+                    loadUsers();
+                } else {
+                    alert(data.error || '创建用户失败');
+                }
+            } catch (error) {
+                alert('创建用户失败: ' + error.message);
+            }
+        }
+
+        // 删除用户
+        async function deleteUser(username) {
+            if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复。`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/users/${username}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('用户删除成功');
+                    loadUsers();
+                } else {
+                    alert(data.error || '删除用户失败');
+                }
+            } catch (error) {
+                alert('删除用户失败: ' + error.message);
+            }
+        }
+
+        // 切换用户状态
+        async function toggleUserStatus(username, status) {
+            const action = status === 'active' ? '启用' : '禁用';
+            if (!confirm(`确定要${action}用户 "${username}" 吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/users/${username}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(data.message);
+                    loadUsers();
+                } else {
+                    alert(data.error || '操作失败');
+                }
+            } catch (error) {
+                alert('操作失败: ' + error.message);
+            }
+        }
+
+        // 修改密码
+        async function changePassword(event) {
+            event.preventDefault();
+            
+            const oldPassword = document.getElementById('old-password').value.trim();
+            const newPassword = document.getElementById('new-password-change').value.trim();
+            const confirmPassword = document.getElementById('confirm-password').value.trim();
+
+            if (newPassword !== confirmPassword) {
+                alert('两次输入的新密码不一致');
+                return;
+            }
+
+            const username = currentUser ? currentUser.username : '';
+
+            try {
+                const response = await fetch(`/api/users/${username}/password`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        old_password: oldPassword, 
+                        new_password: newPassword 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert('密码修改成功');
+                    closeModal();
+                } else {
+                    alert(data.error || '修改密码失败');
+                }
+            } catch (error) {
+                alert('修改密码失败: ' + error.message);
+            }
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                closeModal();
+            }
         }
     </script>
+
+    <style>
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        .badge-admin {
+            background: #e74c3c;
+            color: white;
+        }
+        .badge-self {
+            background: #3498db;
+            color: white;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+        }
+        .status-active {
+            background: #2ecc71;
+            color: white;
+        }
+        .status-disabled {
+            background: #95a5a6;
+            color: white;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal.show {
+            display: block;
+        }
+        .modal-content {
+            background-color: var(--bg-primary);
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+        }
+        .close {
+            position: absolute;
+            right: 15px;
+            top: 10px;
+            font-size: 28px;
+            cursor: pointer;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-secondary);
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
 
     <div class='dino-container'>
         <img src='/static/images/喷火龙.png' class='dino' alt='喷火龙'>

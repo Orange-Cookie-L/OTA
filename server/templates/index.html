@@ -28,7 +28,7 @@
             <button class='tab-btn' data-tab='firmware'>固件管理</button>
             <button class='tab-btn' data-tab='push'>推送更新</button>
             <button class='tab-btn' data-tab='logs'>操作日志</button>
-            <button class='tab-btn' onclick='window.location.href="/users"' data-tab='users'>用户管理</button>
+            <button class='tab-btn' id='users-tab-btn' onclick='window.location.href="/users"' data-tab='users' style='display: none;'>用户管理</button>
         </nav>
 
         <main>
@@ -114,6 +114,7 @@
                         </div>
 
                         <button type='submit' class='btn btn-primary'>推送更新</button>
+                        <button type='button' class='btn btn-secondary' onclick='showScheduledPushModal()'>定时推送</button>
                     </form>
                 </div>
 
@@ -140,6 +141,27 @@
     </div>
 
     <script src='/static/js/app.js'></script>
+    <script>
+        // 检查当前用户是否是管理员，显示用户管理按钮
+        async function checkAdmin() {
+            try {
+                const response = await fetch('/api/current-user');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.user && data.user.role === 'admin') {
+                        document.getElementById('users-tab-btn').style.display = 'inline-block';
+                    }
+                }
+            } catch (error) {
+                console.error('检查用户权限失败:', error);
+            }
+        }
+
+        // 页面加载时检查权限
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAdmin();
+        });
+    </script>
     <div class='dino-container'>
         <img src='/static/images/喷火龙.png' class='dino' alt='喷火龙'>
     </div>

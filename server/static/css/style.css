@@ -1253,46 +1253,111 @@ input[type='text']:focus, select:focus {
 }
 
 @media (max-width: 768px) {
-    .toolbar {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
+    body {
+        padding: 10px;
     }
     
-    .data-table {
-        font-size: 12px;
-    }
-    
-    .data-table th, .data-table td {
-        padding: 10px 12px;
+    .container {
+        border-radius: 12px;
     }
     
     header {
-        padding: 20px;
+        padding: 15px;
         flex-direction: column;
-        gap: 15px;
+        gap: 10px;
         text-align: center;
     }
     
     header h1 {
-        font-size: 20px;
+        font-size: 18px;
     }
     
     .status-bar {
+        flex-direction: column;
+        gap: 10px;
+        align-items: center;
+    }
+    
+    .device-stats {
+        display: flex;
+        gap: 15px;
         justify-content: center;
+    }
+    
+    .tabs {
+        overflow-x: auto;
+        white-space: nowrap;
     }
     
     .tab-btn {
         padding: 12px 15px;
         font-size: 12px;
+        flex: none;
     }
     
     .tab-content {
-        padding: 20px;
+        padding: 15px;
+    }
+    
+    .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 15px;
+    }
+    
+    input[type='text'], select {
+        width: 100%;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+    }
+    
+    .data-table {
+        font-size: 11px;
+        min-width: 600px;
+    }
+    
+    .data-table th, .data-table td {
+        padding: 8px 10px;
     }
     
     .card {
+        padding: 15px;
+    }
+    
+    .card h2 {
+        font-size: 16px;
+    }
+    
+    .modal-content {
+        width: 95%;
         padding: 20px;
+        max-height: 85vh;
+    }
+    
+    .dino-container {
+        height: 150px;
+    }
+    
+    .dino {
+        height: 150px;
+    }
+    
+    .status-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .log-container {
+        font-size: 11px;
+        padding: 15px;
+    }
+    
+    .log-entry .timestamp {
+        min-width: 100px;
     }
 }
 

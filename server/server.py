@@ -8,10 +8,11 @@ import time
 from datetime import datetime, timedelta
 from collections import defaultdict
 import functools
+import uuid
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = '9f8e7d6c5b4a3s2d1f0g9h8j7k6l5m4n3b2v1c0x'  # 用于加密session
-app.permanent_session_lifetime = timedelta(seconds=0)  # 设置session立即过期
+app.permanent_session_lifetime = timedelta(seconds=0)  # 设置session过期时间为0秒
 CORS(app)
 
 UPLOAD_FOLDER = 'firmware'
@@ -26,7 +27,9 @@ if not os.path.exists(UPLOAD_FOLDER):
 devices = {}
 pending_updates = defaultdict(list)
 users = {}
+scheduled_tasks = []
 update_lock = threading.Lock()
+task_lock = threading.Lock()
 
 def calculate_file_crc32(file_path):
     crc = 0xFFFFFFFF
@@ -65,7 +68,10 @@ def load_users():
         users['admin'] = {
             'username': 'admin',
             'password': hash_password('admin'),
-            'registered_at': datetime.now().isoformat()
+            'role': 'admin',
+            'status': 'active',
+            'created_at': datetime.now().isoformat(),
+            'last_login': None
         }
         save_users()
 
@@ -202,10 +208,20 @@ def login():
         password = request.form.get('password')
         
         if username in users and users[username]['password'] == hash_password(password):
+            # 检查用户状态
+            if users[username].get('status') == 'disabled':
+                return render_template('login.html', error='账号已被禁用，请联系管理员')
+            
             session['username'] = username
-            # 不设置session.permanent，确保session不会持久化
+            session.permanent = True  # 设置session为永久会话，使用配置的过期时间
+            
+            # 更新最后登录时间
+            users[username]['last_login'] = datetime.now().isoformat()
+            save_users()
+            
             print(f"Login successful for user: {username}")
             print(f"Session contents: {dict(session)}")
+            print(f"Session permanent: {session.permanent}")
             return redirect(url_for('index'))
         else:
             return render_template('login.html', error='用户名或密码错误')
@@ -221,38 +237,99 @@ def register():
 @app.route('/users', methods=['GET'])
 @login_required
 def users_page():
-    return render_template('users.html', users=users)
+    """用户管理页面"""
+    # 检查是否是管理员
+    current_user = users.get(session['username'], {})
+    if current_user.get('role') != 'admin':
+        return redirect(url_for('index'))
+    return render_template('users.html')
 
-@app.route('/user/add', methods=['POST'])
+@app.route('/api/users', methods=['GET'])
 @login_required
-def add_user():
-    if session['username'] != 'admin':
+def get_users():
+    """获取用户列表API"""
+    # 检查是否是管理员
+    current_user = users.get(session['username'], {})
+    if current_user.get('role') != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+    
+    # 只返回必要的字段，不返回密码
+    user_list = []
+    for username, user_data in users.items():
+        user_list.append({
+            'username': username,
+            'role': user_data.get('role', 'user'),
+            'status': user_data.get('status', 'active'),
+            'created_at': user_data.get('created_at', ''),
+            'last_login': user_data.get('last_login', None)
+        })
+    return jsonify({'users': user_list})
+
+@app.route('/api/users', methods=['POST'])
+@login_required
+def create_user():
+    """创建新用户API"""
+    # 检查权限
+    current_user = users.get(session['username'], {})
+    if current_user.get('role') != 'admin':
         return jsonify({'error': '只有管理员可以添加用户'}), 403
     
     data = request.json
-    username = data.get('username')
-    password = data.get('password')
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    role = data.get('role', 'user')
     
+    # 验证输入
     if not username or not password:
         return jsonify({'error': '用户名和密码不能为空'}), 400
+    
+    if len(username) < 3:
+        return jsonify({'error': '用户名至少需要3个字符'}), 400
+    
+    if len(password) < 6:
+        return jsonify({'error': '密码至少需要6个字符'}), 400
     
     if username in users:
         return jsonify({'error': '用户名已存在'}), 400
     
+    if role not in ['admin', 'user']:
+        return jsonify({'error': '无效的角色类型'}), 400
+    
+    # 创建用户
     users[username] = {
         'username': username,
         'password': hash_password(password),
-        'registered_at': datetime.now().isoformat()
+        'role': role,
+        'status': 'active',
+        'created_at': datetime.now().isoformat(),
+        'last_login': None
     }
     save_users()
-    return jsonify({'message': '用户添加成功'})
+    
+    return jsonify({
+        'message': '用户创建成功',
+        'user': {
+            'username': username,
+            'role': role,
+            'status': 'active',
+            'created_at': users[username]['created_at']
+        }
+    })
 
-@app.route('/user/delete/<username>', methods=['DELETE'])
+@app.route('/api/users/<username>', methods=['DELETE'])
 @login_required
-def delete_user(username):
-    if session['username'] != 'admin':
+def remove_user(username):
+    """删除用户API"""
+    # 检查权限
+    current_user = users.get(session['username'], {})
+    if current_user.get('role') != 'admin':
         return jsonify({'error': '只有管理员可以删除用户'}), 403
     
+    # 不能删除自己
+    if username == session['username']:
+        return jsonify({'error': '不能删除当前登录的用户'}), 400
+    
+    # 不能删除admin账号
     if username == 'admin':
         return jsonify({'error': '不能删除管理员账号'}), 400
     
@@ -262,6 +339,73 @@ def delete_user(username):
     del users[username]
     save_users()
     return jsonify({'message': '用户删除成功'})
+
+@app.route('/api/users/<username>/password', methods=['PUT'])
+@login_required
+def change_password(username):
+    """修改密码API"""
+    # 检查是否是管理员
+    current_user = users.get(session['username'], {})
+    if current_user.get('role') != 'admin':
+        return jsonify({'error': '权限不足'}), 403
+    
+    data = request.json
+    new_password = data.get('new_password', '').strip()
+    
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+    
+    if not new_password:
+        return jsonify({'error': '请输入新密码'}), 400
+    
+    if len(new_password) < 6:
+        return jsonify({'error': '新密码至少需要6个字符'}), 400
+    
+    users[username]['password'] = hash_password(new_password)
+    save_users()
+    return jsonify({'message': '密码修改成功'})
+
+@app.route('/api/users/<username>/status', methods=['PUT'])
+@login_required
+def toggle_user_status(username):
+    """切换用户状态（启用/禁用）API"""
+    current_user = users.get(session['username'], {})
+    if current_user.get('role') != 'admin':
+        return jsonify({'error': '只有管理员可以修改用户状态'}), 403
+    
+    if username == 'admin':
+        return jsonify({'error': '不能禁用管理员账号'}), 400
+    
+    if username not in users:
+        return jsonify({'error': '用户不存在'}), 404
+    
+    data = request.json
+    new_status = data.get('status')
+    
+    if new_status not in ['active', 'disabled']:
+        return jsonify({'error': '无效的状态值'}), 400
+    
+    users[username]['status'] = new_status
+    save_users()
+    
+    status_text = '启用' if new_status == 'active' else '禁用'
+    return jsonify({'message': f'用户已{status_text}'})
+
+@app.route('/api/current-user', methods=['GET'])
+@login_required
+def get_current_user():
+    """获取当前登录用户信息"""
+    username = session.get('username')
+    if username and username in users:
+        user_data = users[username]
+        return jsonify({
+            'user': {
+                'username': username,
+                'role': user_data.get('role', 'user'),
+                'status': user_data.get('status', 'active')
+            }
+        })
+    return jsonify({'error': '未登录'}), 401
 
 @app.route('/', methods=['GET'])
 @login_required
@@ -297,6 +441,75 @@ def check_device_status():
             device['status'] = 'offline'
     save_devices()
 
+def check_scheduled_tasks():
+    """检查并执行定时推送任务"""
+    global scheduled_tasks
+    while True:
+        current_time = datetime.now()
+        tasks_to_remove = []
+        
+        with task_lock:
+            for task in scheduled_tasks:
+                try:
+                    scheduled_time = datetime.fromisoformat(task['scheduled_time'])
+                    if current_time >= scheduled_time and task['status'] == 'pending':
+                        # 执行推送
+                        execute_scheduled_task(task)
+                        task['status'] = 'completed'
+                        task['executed_at'] = current_time.isoformat()
+                        tasks_to_remove.append(task)
+                except Exception as e:
+                    print(f"执行定时任务失败: {e}")
+                    task['status'] = 'failed'
+                    task['error'] = str(e)
+                    tasks_to_remove.append(task)
+        
+        # 移除已完成的任务
+        with task_lock:
+            for task in tasks_to_remove:
+                if task in scheduled_tasks:
+                    scheduled_tasks.remove(task)
+        
+        time.sleep(60)  # 每分钟检查一次
+
+def execute_scheduled_task(task):
+    """执行定时推送任务"""
+    device_ids = task['device_ids']
+    firmware_filename = task['firmware_filename']
+    force_update = task['force_update']
+    
+    try:
+        # 验证固件是否存在
+        filepath = os.path.join(UPLOAD_FOLDER, firmware_filename)
+        if not os.path.exists(filepath):
+            print(f"固件不存在: {firmware_filename}")
+            return
+        
+        # 计算固件信息
+        file_size = os.path.getsize(filepath)
+        crc32 = calculate_file_crc32(filepath)
+        
+        # 构建更新信息
+        update_info = {
+            'firmware_filename': firmware_filename,
+            'firmware_url': f'/firmware/download/{firmware_filename}',
+            'firmware_size': file_size,
+            'firmware_crc32': hex(crc32),
+            'pushed_at': datetime.now().isoformat(),
+            'force_update': force_update
+        }
+        
+        # 执行推送
+        with update_lock:
+            for device_id in device_ids:
+                if device_id in devices:
+                    pending_updates[device_id].append(update_info)
+        
+        save_pending_updates()
+        print(f"定时推送执行成功: {firmware_filename} 到 {len(device_ids)} 个设备")
+    except Exception as e:
+        print(f"执行定时推送失败: {e}")
+
 def load_pending_updates():
     global pending_updates
     if os.path.exists(PENDING_UPDATES_FILE):
@@ -314,6 +527,10 @@ def save_pending_updates():
 load_devices()
 load_pending_updates()
 load_users()
+
+# 启动定时任务检查线程
+task_checker_thread = threading.Thread(target=check_scheduled_tasks, daemon=True)
+task_checker_thread.start()
 
 @app.route('/device/register', methods=['POST'])
 def register_device():
@@ -463,6 +680,77 @@ def push_update():
         'target_devices': len(device_ids),
         'update': update_info
     })
+
+@app.route('/push/schedule', methods=['POST'])
+def schedule_push():
+    """创建定时推送任务"""
+    data = request.json
+    device_ids = data.get('device_ids', [])
+    firmware_filename = data.get('firmware_filename')
+    scheduled_time = data.get('scheduled_time')
+    force_update = data.get('force_update', False)
+    
+    if not firmware_filename:
+        return jsonify({'error': 'firmware_filename is required'}), 400
+    
+    if not scheduled_time:
+        return jsonify({'error': 'scheduled_time is required'}), 400
+    
+    if not device_ids:
+        return jsonify({'error': 'device_ids is required'}), 400
+    
+    # 验证固件是否存在
+    filepath = os.path.join(UPLOAD_FOLDER, firmware_filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'Firmware not found'}), 404
+    
+    # 创建任务
+    task_id = str(uuid.uuid4())
+    task = {
+        'id': task_id,
+        'device_ids': device_ids,
+        'firmware_filename': firmware_filename,
+        'scheduled_time': scheduled_time,
+        'force_update': force_update,
+        'status': 'pending',
+        'created_at': datetime.now().isoformat()
+    }
+    
+    with task_lock:
+        scheduled_tasks.append(task)
+    
+    print(f"定时推送任务创建成功: {task_id}")
+    return jsonify({'message': 'Scheduled push task created successfully', 'task_id': task_id})
+
+@app.route('/push/scheduled-tasks', methods=['GET'])
+def get_scheduled_tasks():
+    """获取定时推送任务列表"""
+    with task_lock:
+        return jsonify({'tasks': scheduled_tasks})
+
+@app.route('/push/schedule/<task_id>', methods=['DELETE'])
+def cancel_scheduled_task(task_id):
+    """取消定时推送任务"""
+    global scheduled_tasks
+    task = None
+    
+    with task_lock:
+        for t in scheduled_tasks:
+            if t['id'] == task_id:
+                task = t
+                break
+    
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    
+    if task['status'] != 'pending':
+        return jsonify({'error': 'Task cannot be cancelled'}), 400
+    
+    with task_lock:
+        scheduled_tasks.remove(task)
+    
+    print(f"定时推送任务已取消: {task_id}")
+    return jsonify({'message': 'Task cancelled successfully'})
 
 @app.route('/push/status/<device_id>', methods=['GET'])
 def get_push_status(device_id):
