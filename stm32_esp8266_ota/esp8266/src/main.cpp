@@ -303,7 +303,21 @@ void checkForUpdate(bool auto_download = false) {
 }
 
 /**
-  * @brief 下载固件并传输到STM32
+  * @brief 计算校验和
+  * @param data: 数据
+  * @param length: 数据长度
+  * @retval 校验和
+  */
+uint8_t calculateChecksum(uint8_t* data, size_t length) {
+  uint8_t checksum = 0;
+  for (size_t i = 0; i < length; i++) {
+    checksum ^= data[i];
+  }
+  return checksum;
+}
+
+/**
+  * @brief 下载固件并传输到STM32（支持断点传输和数据校验）
   * @param firmware_url: 固件下载URL
   * @retval None
   */
@@ -326,12 +340,35 @@ void downloadFirmware(String firmware_url) {
       Serial.print("FIRMWARE_SIZE,");
       Serial.println(firmwareSize);
       
-      // 等待STM32确认
-      delay(1000);
+      // 等待STM32确认（可能包含已接收的字节数，用于断点续传）
+      while (!Serial.available()) {
+        delay(10);
+      }
+      String response = Serial.readStringUntil('\n');
+      response.trim();
+      
+      size_t bytesRead = 0;
+      if (response.startsWith("RESUME:")) {
+        // 断点续传
+        bytesRead = response.substring(6).toInt();
+        Serial.print("从断点续传，已接收: " + String(bytesRead) + " 字节\n");
+        // 设置HTTP Range头
+        http.end();
+        http.begin(firmware_url);
+        String rangeHeader = "bytes=" + String(bytesRead) + "-";
+        http.addHeader("Range", rangeHeader);
+        httpCode = http.GET();
+        if (httpCode != HTTP_CODE_PARTIAL_CONTENT) {
+          Serial.println("断点续传失败，重新开始下载\n");
+          bytesRead = 0;
+          http.end();
+          http.begin(firmware_url);
+          httpCode = http.GET();
+        }
+      }
       
       // 读取固件数据并传输
       WiFiClient* stream = http.getStreamPtr();
-      size_t bytesRead = 0;
       size_t chunkSize = 64; // 每次传输64字节
       uint8_t buffer[chunkSize];
       
@@ -341,20 +378,108 @@ void downloadFirmware(String firmware_url) {
           size_t toRead = min(bytesAvailable, chunkSize);
           stream->readBytes(buffer, toRead);
           
+          // 计算校验和
+          uint8_t checksum = calculateChecksum(buffer, toRead);
+          
+          // 发送数据块信息
+          Serial.print("DATA_BLOCK,");
+          Serial.print(bytesRead);
+          Serial.print(",");
+          Serial.print(toRead);
+          Serial.print(",");
+          Serial.println(checksum);
+          
+          // 等待STM32准备接收
+          while (!Serial.available()) {
+            delay(10);
+          }
+          Serial.read(); // 读取准备就绪字符
+          
           // 发送数据到STM32
           Serial.write(buffer, toRead);
           
           // 等待STM32确认
-          while (!Serial.available()) {
-            delay(10);
+          int retry_count = 0;
+          const int max_retries = 3;
+          bool ack_received = false;
+          
+          while (retry_count < max_retries && !ack_received) {
+            // 等待STM32响应
+            unsigned long start_time = millis();
+            while (!Serial.available() && (millis() - start_time) < 5000) {
+              delay(10);
+            }
+            
+            if (Serial.available()) {
+              uint8_t ack = Serial.read();
+              
+              if (ack == 'A') {
+                // 确认成功
+                bytesRead += toRead;
+                ack_received = true;
+                
+                // 显示进度
+                int progress = (bytesRead * 100) / firmwareSize;
+                Serial.print("下载进度: " + String(progress) + "%\r");
+              } else {
+                // 确认失败，重新发送当前块
+                Serial.println("\n数据校验失败，重新发送当前块 (尝试 " + String(retry_count + 1) + "/" + String(max_retries) + ")\n");
+                retry_count++;
+                // 重新发送数据块信息
+                Serial.print("DATA_BLOCK,");
+                Serial.print(bytesRead);
+                Serial.print(",");
+                Serial.print(toRead);
+                Serial.print(",");
+                Serial.println(checksum);
+                
+                // 等待STM32准备接收
+                start_time = millis();
+                while (!Serial.available() && (millis() - start_time) < 2000) {
+                  delay(10);
+                }
+                if (Serial.available()) {
+                  Serial.read(); // 读取准备就绪字符
+                  // 重新发送数据
+                  Serial.write(buffer, toRead);
+                } else {
+                  Serial.println("\nSTM32无响应，重新尝试\n");
+                }
+              }
+            } else {
+              // 超时无响应，重新发送
+              Serial.println("\nSTM32响应超时，重新发送当前块 (尝试 " + String(retry_count + 1) + "/" + String(max_retries) + ")\n");
+              retry_count++;
+              // 重新发送数据块信息
+              Serial.print("DATA_BLOCK,");
+              Serial.print(bytesRead);
+              Serial.print(",");
+              Serial.print(toRead);
+              Serial.print(",");
+              Serial.println(checksum);
+              
+              // 等待STM32准备接收
+              start_time = millis();
+              while (!Serial.available() && (millis() - start_time) < 2000) {
+                delay(10);
+              }
+              if (Serial.available()) {
+                Serial.read(); // 读取准备就绪字符
+                // 重新发送数据
+                Serial.write(buffer, toRead);
+              } else {
+                Serial.println("\nSTM32无响应，重新尝试\n");
+              }
+            }
           }
-          Serial.read(); // 读取确认字符
           
-          bytesRead += toRead;
-          
-          // 显示进度
-          int progress = (bytesRead * 100) / firmwareSize;
-          Serial.print("下载进度: " + String(progress) + "%\r");
+          if (!ack_received) {
+            // 多次重传失败
+            Serial.println("\n数据块重传失败，终止下载\n");
+            http.end();
+            Serial.println("DOWNLOAD_FAILED");
+            return;
+          }
         }
         delay(10);
       }

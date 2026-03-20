@@ -365,6 +365,31 @@ void send_uart_command(const char* command)
 // 更新标志位
 bool update_available = false; // 是否有更新可用
 
+// 数据块信息
+typedef struct {
+  uint32_t offset;      // 数据块偏移量
+  uint16_t length;      // 数据块长度
+  uint8_t checksum;     // 数据块校验和
+  bool processing;      // 是否正在处理
+} DataBlockInfo;
+
+DataBlockInfo current_block; // 当前处理的数据块
+
+/**
+  * @brief 计算校验和
+  * @param data: 数据
+  * @param length: 数据长度
+  * @retval 校验和
+  */
+uint8_t calculate_checksum(uint8_t* data, uint32_t length)
+{
+  uint8_t checksum = 0;
+  for (uint32_t i = 0; i < length; i++) {
+    checksum ^= data[i];
+  }
+  return checksum;
+}
+
 /**
   * @brief 写入闪存页
   * @param address: 闪存地址偏移量
@@ -408,6 +433,7 @@ void process_esp_response(const char* response)
     firmware_size = 0;
     firmware_offset = 0;
     buffer_index = 0;
+    current_block.processing = false;
     Serial.println("开始下载固件...");
   } 
   // 检查是否接收到固件大小
@@ -417,8 +443,34 @@ void process_esp_response(const char* response)
     firmware_size = atol(size_str);
     Serial.print("固件大小: ");
     Serial.println(firmware_size);
-    // 确认接收
-    Serial.write('A');
+    
+    // 检查是否有已下载的数据（断点续传）
+    // 这里可以添加检查闪存中已下载数据的逻辑
+    // 暂时总是从0开始
+    Serial.print("RESUME:0\n");
+  }
+  // 检查是否接收到数据块信息
+  else if (strstr(response, "DATA_BLOCK,") != NULL) {
+    // 解析数据块信息
+    char* offset_str = strchr(response, ',') + 1;
+    char* length_str = strchr(offset_str, ',') + 1;
+    char* checksum_str = strchr(length_str, ',') + 1;
+    
+    current_block.offset = atol(offset_str);
+    current_block.length = atoi(length_str);
+    current_block.checksum = atoi(checksum_str);
+    current_block.processing = true;
+    
+    Serial.print("接收数据块: 偏移量=");
+    Serial.print(current_block.offset);
+    Serial.print(", 长度=");
+    Serial.print(current_block.length);
+    Serial.print(", 校验和=");
+    Serial.println(current_block.checksum);
+    
+    // 准备接收数据
+    buffer_index = 0;
+    Serial.write('R'); // 发送准备就绪
   }
   // 检查是否下载完成
   else if (strcmp(response, "DOWNLOAD_COMPLETE") == 0) {
@@ -461,18 +513,32 @@ void process_esp_response(const char* response)
   */
 void process_firmware_data(uint8_t data)
 {
-  if (firmware_downloading) {
+  if (firmware_downloading && current_block.processing) {
     // 存储数据到缓冲区
     firmware_buffer[buffer_index++] = data;
     
-    // 当缓冲区满时，写入闪存
-    if (buffer_index >= 64) {
-      write_flash_page(firmware_offset, firmware_buffer, 64);
-      firmware_offset += 64;
-      buffer_index = 0;
+    // 当缓冲区满或达到当前块长度时，处理数据
+    if (buffer_index >= current_block.length) {
+      // 计算校验和
+      uint8_t calculated_checksum = calculate_checksum(firmware_buffer, current_block.length);
       
-      // 发送确认
-      Serial.write('A');
+      if (calculated_checksum == current_block.checksum) {
+        // 校验和正确，写入闪存
+        write_flash_page(current_block.offset, firmware_buffer, current_block.length);
+        firmware_offset = current_block.offset + current_block.length;
+        
+        // 发送确认
+        Serial.write('A');
+        Serial.println("数据块接收成功，校验通过");
+      } else {
+        // 校验和错误，发送否定确认
+        Serial.write('N');
+        Serial.println("数据块接收失败，校验和错误");
+      }
+      
+      // 重置缓冲区和处理状态
+      buffer_index = 0;
+      current_block.processing = false;
     }
   }
 }
